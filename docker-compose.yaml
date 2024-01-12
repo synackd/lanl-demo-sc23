@@ -41,17 +41,24 @@ services:
     network_mode: "host"
     volumes:
       - /data/dhcpd:/data
-  # postrges DB for hms-bss
-  postgres-bss:
-    hostname: postgres-bss
-    container_name: postgres-bss
-    image: postgres:11-alpine
+  # bss-init
+  bss-init:
+    hostname: bss-init
+    container_name: bss-init
+    image: OpenCHAMI/bss:1.26.0-dirty
     environment:
-      - POSTGRES_PASSWORD=bssuser
-      - POSTGRES_USER=bssuser
-      - POSTGRES_DB=bssdb
+      - BSS_DBHOST=postgres
+      - BSS_DBPORT=5432
+      - BSS_DBUSER=ochamiuser
+      - BSS_DBPASS=ochamiuser
+      - BSS_DBNAME=ochamidb
+      - BSS_DBOPTS=sslmode=disable
+    depends_on:
+      - postgres
     networks:
       - bss
+    entrypoint:
+      - /usr/local/bin/bss-init
   # boot-script-service
   bss:
     hostname: bss
@@ -65,7 +72,8 @@ services:
     ports:
       - '27778:27778'
     depends_on:
-      - postgres-bss
+      - postgres
+      - bss-init
       - smd
     networks:
       - bss
@@ -75,30 +83,31 @@ services:
       timeout: 10s
       retries: 5
   # postgres DB for SMD
-  postgres-smd:
-    container_name: postgres-smd
-    hostname: postgres-smd
+  postgres:
+    container_name: postgres
+    hostname: postgres
     image: postgres:11-alpine
     environment:
-      - POSTGRES_PASSWORD=hmsdsuser
-      - POSTGRES_USER=hmsdsuser
-      - POSTGRES_DB=hmsds
+      - POSTGRES_PASSWORD=ochamiuser
+      - POSTGRES_USER=ochamiuser
+      - POSTGRES_DB=ochamidb
     networks:
       - smd
+      - bss
   # sets up postgres for SMD data
   smd-init:
     container_name: smd-init
     image: docker.io/bikeshack/smd:v2.12.11-ochami
     environment:
-      - SMD_DBHOST=postgres-smd
+      - SMD_DBHOST=postgres
       - SMD_DBPORT=5432
-      - SMD_DBUSER=hmsdsuser
-      - SMD_DBPASS=hmsdsuser
-      - SMD_DBNAME=hmsds
+      - SMD_DBUSER=ochamiuser
+      - SMD_DBPASS=ochamiuser
+      - SMD_DBNAME=ochamidb
       - SMD_DBOPTS=sslmode=disable
     hostname: smd-init
     depends_on:
-      - postgres-smd
+      - postgres
     networks:
       - smd
     entrypoint:
@@ -116,7 +125,7 @@ services:
       - SMD_DBOPTS=sslmode=disable
     hostname: smd
     depends_on:
-      - postgres-smd
+      - postgres
       - smd-init
     ports:
       - "27779:27779"
